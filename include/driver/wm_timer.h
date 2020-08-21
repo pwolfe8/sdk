@@ -30,7 +30,7 @@ struct tls_timer_cfg {
     u32  timeout;                       /**< timeout period */
     bool is_repeat;                     /**< cycle timer */
     tls_timer_irq_callback callback;    /**< timeout callback function */
-    void *arg;                          /**< parameter fot the timeout callback function */
+    void *arg;                          /**< parameter for the timeout callback function */
 };
 
 /**

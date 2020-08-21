@@ -140,14 +140,15 @@ typedef struct demo_sys{
 	u8 overflag;		/*溢出标志*/
 	u8 MsgNum;
 
-
 	bool socket_ok;
 	int socket_num;
 	char *sock_rx;
-	u16 sock_data_len;
+    char *sock_tx;
+	u16 sock_rx_data_len;
+    u16 sock_tx_data_len;
 
-	int recvlen;		//socket接收的数据长度，用于测试
-	int translen;		//socket发送的数据长度，用于测试
+	int recvlen;		// The length of the data received by the socket, used for testing
+	int translen;		// The length of the data sent by the socket, used for testing
 	u8 is_raw; // 1:raw socket; 0:标准socket
 }ST_Demo_Sys;
 
