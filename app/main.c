@@ -16,6 +16,9 @@
 #include "wm_sockets.h"
 #include "wm_timer.h"
 
+// #include "wm_pwm.h"
+// #include "wm_gpio_afsel.h"
+
 
 #define USER_TASK_STK_SIZE      512
 #define USER_TASK_PRIO          32
@@ -23,6 +26,10 @@ static u32 user_task_stk[USER_TASK_STK_SIZE];
 
 tls_os_queue_t *sprinkler_management_q = NULL;
 
+#define SPRINKLER_ON 1
+#define SPRINKLER_OFF 0
+
+void set_sprinkler(int value);
 int demo_connect_net(char *ssid, char *pwd);
 int is_supported_cmd(u8 cmd);
 void print_recv_buffer();
@@ -60,12 +67,16 @@ void sprinkler_management_task(void *data)
 {
     // ms_per_cycle = 2
     void *task_comm_msg;
-    u8 gpio_level = 0;
     u8 state = STATE_SPRINKLER_OFF;
     
-    // init gpio 
-    tls_gpio_cfg(WM_IO_PB_08, WM_GPIO_DIR_OUTPUT, WM_GPIO_ATTR_FLOATING);
     // note: WM_IO_PB_08 through WM_IO_PB_12 are all available to pinmux as gpios/pwm/adcs
+    // init gpio 
+    tls_gpio_cfg(WM_IO_PB_08, WM_GPIO_DIR_OUTPUT, WM_GPIO_ATTR_FLOATING); // sprinkler gpio 
+    tls_gpio_cfg(WM_IO_PB_09, WM_GPIO_DIR_OUTPUT, WM_GPIO_ATTR_FLOATING); // boostconverter gpio 
+    // wm_pwm5_config(WM_IO_PB_08);
+    // tls_pwm_init(4, 1000, 0, 0);
+    // tls_pwm_start(4);
+    
     
     // init sprinkler timer
     timer_cfg.unit = TLS_TIMER_UNIT_MS;
@@ -86,8 +97,7 @@ void sprinkler_management_task(void *data)
                         if (cmd_msg->cmd == CMD_SPRINKLER_ON) {
 
                             // turn on sprinkler
-                            gpio_level = 1;
-                            tls_gpio_write(WM_IO_PB_08, gpio_level);
+                            set_sprinkler(SPRINKLER_ON);
 
                             // start hardware timer
                             timer_cfg.timeout = cmd_msg->duration_ms;
@@ -104,8 +114,7 @@ void sprinkler_management_task(void *data)
 
                         } else {
                             // make sure the sprinkler is off
-                            gpio_level = 0;
-                            tls_gpio_write(WM_IO_PB_08, gpio_level);
+                            set_sprinkler(SPRINKLER_OFF);
 
                             // send feedback
                             printf("sprinkler already off!\n");
@@ -118,8 +127,7 @@ void sprinkler_management_task(void *data)
                         if (cmd_msg->cmd == CMD_SPRINKLER_ESTOP) {
                         
                             // turn the sprinkler off
-                            gpio_level = 0;
-                            tls_gpio_write(WM_IO_PB_08, gpio_level);
+                            set_sprinkler(SPRINKLER_OFF);
 
                             // turn off timer
                             tls_timer_stop(timer_id);
@@ -168,8 +176,7 @@ void sprinkler_management_task(void *data)
 
             case RECEIVED_TIMER_STOP:
                 printf("received timer stop. stopping sprinkler...\n");
-                gpio_level = 0;
-                tls_gpio_write(WM_IO_PB_08, gpio_level);
+                set_sprinkler(SPRINKLER_OFF);
                 state = STATE_SPRINKLER_OFF;
                 break;
 
@@ -183,6 +190,21 @@ void sprinkler_management_task(void *data)
 
 int is_supported_cmd(u8 cmd) {
     return ( (cmd==CMD_SPRINKLER_ON) || (cmd==CMD_SPRINKLER_ESTOP) );
+}
+
+void set_sprinkler(int value) {
+    // value = 0 is off, value = 1 (or anything else) is on
+    if (value) {
+        // turn on boost converter, wait then turn on sprinkler
+        tls_gpio_write(WM_IO_PB_09, 1); // boost converter (CTS)
+        tls_os_time_delay(1);           // delay 2 ms
+        tls_gpio_write(WM_IO_PB_08, 1); // sprinkler (IO)   // tls_pwm_duty_set(4, 191);
+    } else {
+        // turn off sprinkler, wait, turn off boost converter
+        tls_gpio_write(WM_IO_PB_08, 0); // sprinkler (IO)   // tls_pwm_duty_set(4, 0);
+        tls_os_time_delay(1);           // delay 2 ms
+        tls_gpio_write(WM_IO_PB_09, 0); // boost converter (CTS)
+    }
 }
 
 static tls_timer_irq_callback sprinkler_timer_cb(u8 *arg)
@@ -460,7 +482,7 @@ void UserMain(void)
 {
     /* delay and print welcome message on boot */
     tls_os_time_delay(1 * HZ);  
-    printf("\n\nWelcome to Philip's Sprinkler Management System, compile @%s %s\r\n", __DATE__, __TIME__);
+    printf("\n\nWelcome to Philip's Sprinkler Management System v2.0, compile @%s %s\r\n", __DATE__, __TIME__);
 	
     /* connect to wifi */
     printf("connecting to wifi...\n");
